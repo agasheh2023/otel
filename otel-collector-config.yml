@@ -1,162 +1,44 @@
-version: '3.8'
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "0.0.0.0:4318"
 
-services:
-  # Nginx Reverse Proxy
-  nginx:
-    image: nginx:1.24
-    ports:
-      - "8080:80"  # HTTP Access
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    networks:
-      - observability
-    deploy:
-      replicas: 1
-      placement:
-        constraints:
-          - node.role == manager
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
 
-  # Elasticsearch (Database for Logs and Traces)
-  elasticsearch:
-    image: elasticsearch:8.10.1
-    environment:
-      discovery.type: single-node
-      cluster.name: elasticsearch-clusternode
-      node.name: es-node
-      xpack.security.enabled: "false"
-      bootstrap.memory_lock: "false"
-      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
-    ports:
-      - "9200:9200"
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    deploy:
-      replicas: 1
-      placement:
-        constraints:
-          - node.labels.db-node == true
-    networks:
-      - observability
+exporters:
+  prometheusremotewrite:
+    endpoint: "http://prometheus:9090/api/v1/write"
 
-  # Grafana Mimir (Metrics Storage)
-  mimir:
-    image: grafana/mimir:2.14.1
-    configs:
-      - source: mimir
-        target: /etc/mimir/mimir.yaml
-    command:
-      - "--config.file=/etc/mimir/mimir.yaml"
-    volumes:
-      - mimir-data:/data
-    ports:
-      - "9009:9009"
-    deploy:
-      replicas: 1
-      placement:
-        constraints:
-          - node.labels.db-node == true
-    networks:
-      - observability
-
-  # Prometheus (Metrics Analyzer)
-  prometheus:
-    image: prom/prometheus:v2.45.0
-    configs:
-      - source: prometheus
-        target: /etc/prometheus/prometheus.yaml
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yaml"
-      - "--web.enable-remote-write-receiver"
-    volumes:
-      - prometheus-data:/prometheus
-    ports:
-      - "9090:9090"
-    deploy:
-      replicas: 1
-      placement:
-        constraints:
-          - node.labels.metric-node == true
-    networks:
-      - observability
-
-  # Grafana (Metrics Visualyzer)
-  grafana:
-    image: grafana/grafana:10.0.2
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - grafana-data:/var/lib/grafana
-    deploy:
-      replicas: 1
-      placement:
-        constraints:
-          - node.labels.metric-node == true
-    networks:
-      - observability
-
-  # Kibana (Logs Visualyzer)
-  kibana:
-    image: kibana:8.10.1
-    environment:
-      ELASTICSEARCH_HOST: "http://elasticsearch:9200"
-    deploy:
-      replicas: 1
-      placement:
-        constraints:
-          - node.labels.log-node == true
-    networks:
-      - observability
-
-  # Jaeger (Traces Visualyzer)
   jaeger:
-    image: jaegertracing/all-in-one:1.53
-    environment:
-      - SPAN_STORAGE_TYPE=elasticsearch
-      - ES_SERVER_URLS=http://elasticsearch:9200
-      - ES_INDEX_PREFIX=jaeger-traces
-      - ES_TAGS_AS_FIELDS_ALL=true
-    deploy:
-      replicas: 1
-      placement:
-        constraints:
-          - node.labels.log-node == true
-    networks:
-      - observability
+    endpoint: "http://jaeger:14250"
+    tls:
+      insecure: true
 
-  # Otel-Collector (Telemetry Data Receiver)
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.82.0
-    configs:
-      - source: otel-collector-config
-        target: /etc/otel-collector-config.yaml
-    command:
-      - "--config=/etc/otel-collector-config.yaml"
-    deploy:
-      replicas: 3
-      placement:
-        constraints:
-          - node.labels.collector == true
-    networks:
-      - observability
+  elasticsearch:
+    endpoints: ["http://elasticsearch:9200"]
+    logs_index: "otel-logs-%{+yyyy.mm.dd}"   # Index for logs
+    traces_index: "jaeger-traces-%{+yyyy.mm.dd}" # Index for traces
 
-configs:
-  prometheus:
-    external: true
-  otel-collector-config:
-    external: true
-  mimir:
-    external: true
+  logging:
+    loglevel: debug
 
-volumes:
-  prometheus-data:
-    external: true
-  grafana-data:
-    external: true
-  es-data:
-    external: true
-  mimir-data:
-    external: true
+service:
+  telemetry:
+    logs:
+      level: debug
+  extensions: [health_check]
+  pipelines:
+    traces: # Pipeline for Traces #
+      receivers: [otlp]
+      exporters: [jaeger, elasticsearch, logging] # Send traces to Jaeger & Elasticsearch
 
-networks:
-  observability:
-    driver: overlay
+    metrics: # Pipeline for Metrics #
+      receivers: [otlp]
+      exporters: [prometheusremotewrite, logging] # Send metrics to Prometheus
+
+    logs: # Pipeline for Logs #
+      receivers: [otlp]
+      exporters: [elasticsearch, logging] # Send logs to Elasticsearch
