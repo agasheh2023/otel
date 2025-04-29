@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   # Nginx Reverse Proxy
   nginx:
@@ -9,8 +11,6 @@ services:
       - "8080:80"  # HTTP Access
     volumes:
       - /dev/null:/etc/nginx/nginx.conf:ro
-    networks:
-      - observability
     deploy:
       replicas: 1
       placement:
@@ -54,7 +54,7 @@ services:
     command:
       - "--storageDataPath=/storage"
     volumes:
-      - /docker-data/victoria-data:/data
+      - /docker-data/victoria-data:/storage
     ports:
       - "8428:8428"
     deploy:
@@ -75,7 +75,7 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yaml"
       - "--web.enable-remote-write-receiver"
       - "--storage.tsdb.retention.time=30d"
-      - "--storage.tsdb.path:/prometheus"
+      - "--storage.tsdb.path=/prometheus"
     volumes:
       - /docker-data/prometheus-data:/prometheus
     ports:
@@ -99,7 +99,7 @@ services:
     volumes:
       - /docker-data/grafana-data:/var/lib/grafana
     ports:
-      "3000:3000"
+      - "3000:3000"
     deploy:
       replicas: 1
       placement:
@@ -114,7 +114,7 @@ services:
     environment:
       ELASTICSEARCH_HOST: "http://elasticsearch:9200"
     ports:
-      "5601:5601"
+      - "5601:5601"
     deploy:
       replicas: 1
       placement:
@@ -130,7 +130,7 @@ services:
     environment:
       - SPAN_STORAGE_TYPE=elasticsearch
       - ES_SERVER_URLS=http://elasticsearch:9200
-      - QUERY_INDEX_TAGS=url.path,http.request.method,http.responce.status_code,db.statement
+      - QUERY_INDEX_TAGS=url.path,http.request.method,http.response.status_code,db.statement
     ports:
       - "16686:16686"
       - "14250:14250"
