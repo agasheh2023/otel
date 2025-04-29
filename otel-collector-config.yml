@@ -4,13 +4,13 @@ receivers:
       http:
         endpoint: "0.0.0.0:4318"
 
-extensions:
-  health_check:
-    endpoint: 0.0.0.0:13133
+#extensions:
+#  health_check:
+#    endpoint: 0.0.0.0:13133
 
 exporters:
   prometheusremotewrite:
-    endpoint: "http://prometheus:9090/api/v1/write"
+    endpoint: "http://victoria-metrics:8428/api/v1/write"
 
   jaeger:
     endpoint: "http://jaeger:14250"
@@ -20,7 +20,6 @@ exporters:
   elasticsearch:
     endpoints: ["http://elasticsearch:9200"]
     logs_index: "otel-logs-%{+yyyy.mm.dd}"   # Index for logs
-    traces_index: "jaeger-traces-%{+yyyy.mm.dd}" # Index for traces
 
   logging:
     loglevel: debug
@@ -28,17 +27,17 @@ exporters:
 service:
   telemetry:
     logs:
-      level: debug
-  extensions: [health_check]
+      level: info
+#  extensions: [health_check]
   pipelines:
     traces: # Pipeline for Traces #
       receivers: [otlp]
-      exporters: [jaeger, elasticsearch, logging] # Send traces to Jaeger & Elasticsearch
+      exporters: [jaeger, logging]                    # Send traces to Jaeger & Elasticsearch
 
     metrics: # Pipeline for Metrics #
       receivers: [otlp]
-      exporters: [prometheusremotewrite, logging] # Send metrics to Prometheus
+      exporters: [prometheusremotewrite, logging]     # Send metrics to Prometheus
 
     logs: # Pipeline for Logs #
       receivers: [otlp]
-      exporters: [elasticsearch, logging] # Send logs to Elasticsearch
+      exporters: [elasticsearch, logging]             # Send logs to Elasticsearch
